@@ -1,90 +1,15 @@
-import streamlit as st
-import yfinance as yf
-import numpy as np
-import pandas as pd
-from scipy.optimize import minimize
+# ==========================================
+# UI 렌더링 (경제학적 특성 그룹화 및 이름 표기 적용)
+# ==========================================
 
-st.set_page_config(page_title="2X 섹터 로테이션", layout="centered")
-st.markdown("<style>.stNumberInput, .stTextInput { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
-
-# 1. 대상 자산: 미국 GICS 11대 핵심 섹터 2배(2X) 레버리지 ETF
-TARGET_TICKERS = ["ROM", "UYG", "RXL", "DIG", "UXI", "UCC", "UYM", "UGE", "UPW", "URE", "LTL"]
-SECTOR_NAMES = {
-    "ROM": "기술 2X (Tech)",
-    "UYG": "금융 2X (Financials)",
-    "RXL": "헬스케어 2X (Health)",
-    "DIG": "에너지 2X (Energy)",
-    "UXI": "산업재 2X (Industrials)",
-    "UCC": "임의소비재 2X (Discretion)",
-    "UYM": "소재 2X (Materials)",
-    "UGE": "필수소비재 2X (Staples)",
-    "UPW": "유틸리티 2X (Utilities)",
-    "URE": "부동산 2X (Real Estate)",
-    "LTL": "커뮤니케이션 2X (Comm)"
+# 경제 특성별 티커 그룹핑 딕셔너리
+SECTOR_GROUPS = {
+    "🚀 성장 & 기술 (Growth)": ["ROM", "LTL"],
+    "🏭 경기 민감 & 순환 (Cyclical)": ["UYG", "UXI", "UCC", "URE"],
+    "🛡️ 경기 방어 (Defensive)": ["RXL", "UGE", "UPW"],
+    "🛢️ 물가 방어 & 원자재 (Inflation)": ["DIG", "UYM"]
 }
-RISK_FREE_RATE = 0.03
 
-# 2. 데이터 분석 기간 압축: 레버리지의 휩소를 피하는 3개월(3mo) 스캐너
-@st.cache_data(ttl="1d", show_spinner=False)
-def fetch_momentum_data(tickers):
-    df = yf.download(list(tickers), period="3mo", progress=False)
-    if isinstance(df.columns, pd.MultiIndex):
-        return df['Close'].dropna()
-    else:
-        return df[['Close']].dropna()
-
-@st.cache_data(ttl="10m", show_spinner=False)
-def get_current_prices(tickers):
-    prices = {}
-    df = yf.download(list(tickers), period="5d", progress=False)
-    for ticker in tickers:
-        try:
-            if isinstance(df.columns, pd.MultiIndex):
-                valid_data = df['Close'][ticker].dropna()
-            else:
-                valid_data = df['Close'].dropna()
-                
-            if not valid_data.empty:
-                prices[ticker] = float(valid_data.iloc[-1])
-            else:
-                prices[ticker] = 0.0
-        except Exception:
-            prices[ticker] = 0.0
-    return prices
-
-def portfolio_performance(weights, mean_returns, cov_matrix):
-    returns = np.sum(mean_returns * weights) * 252
-    std_dev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
-    return returns, std_dev, (returns - RISK_FREE_RATE) / std_dev
-
-def negative_sharpe(weights, mean_returns, cov_matrix):
-    return -portfolio_performance(weights, mean_returns, cov_matrix)[2]
-
-# --- 백그라운드 최적화 연산 ---
-tickers_tuple = tuple(TARGET_TICKERS)
-
-with st.spinner("최근 3개월 2배수 섹터의 자금 쏠림을 스캔하고 있습니다..."):
-    history_3mo = fetch_momentum_data(tickers_tuple)
-    log_returns = np.log(history_3mo / history_3mo.shift(1)).dropna()
-    mean_returns = log_returns.mean()
-    cov_matrix = log_returns.cov()
-    
-    num_assets = len(TARGET_TICKERS)
-    
-    # 3. 비중 캡(Cap) 하향: 개별 종목 최대 30% 제한으로 레버리지 MDD 방어
-    bounds = tuple((0.0, 0.3) for _ in range(num_assets)) 
-    constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
-    
-    opt_result = minimize(negative_sharpe, num_assets * [1./num_assets], 
-                          args=(mean_returns, cov_matrix),
-                          method='SLSQP', bounds=bounds, constraints=constraints)
-    
-    optimal_weights = {TARGET_TICKERS[i]: opt_result.x[i] for i in range(num_assets)}
-    current_prices = get_current_prices(tickers_tuple)
-
-# ==========================================
-# UI 렌더링
-# ==========================================
 st.title("🚀 2X 레버리지 섹터 로테이션")
 st.caption("최근 3개월 모멘텀 기반 2배수 전술적 자산 배분 (위성 계좌용)")
 
@@ -103,23 +28,34 @@ else:
     cols = st.columns(min(len(active_sectors), 4))
     for i, (ticker, weight) in enumerate(active_sectors):
         with cols[i % len(cols)]:
-            st.metric(f"{ticker}", f"{weight*100:.1f}%", help=SECTOR_NAMES[ticker])
+            # [반영 1] 티커 옆에 섹터 이름 명시적으로 표시
+            sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0] # '기술 2X (Tech)'에서 '기술'만 추출
+            st.metric(f"{ticker} ({sector_clean_name})", f"{weight*100:.1f}%")
 
 st.divider()
 
-# 2. 내 계좌 입력
+# 2. 내 계좌 입력 (경제 그룹별로 컨테이너 분리)
 st.subheader("💼 위성 계좌 상태 입력")
 shares_input = {}
 
-with st.container(border=True):
-    cols = st.columns(3)
-    for i, ticker in enumerate(TARGET_TICKERS):
-        with cols[i % 3]:
-            shares_input[ticker] = st.number_input(f"{ticker}", min_value=0, step=1, key=f"s_{ticker}", help=SECTOR_NAMES[ticker])
-            price_display = current_prices.get(ticker, 0.0)
-            st.caption(f"${price_display:.2f}")
+# [반영 2] 그룹별로 시각적으로 묶어서 보여주기
+for group_name, tickers_in_group in SECTOR_GROUPS.items():
+    st.markdown(f"**{group_name}**")
+    with st.container(border=True):
+        # 모바일에서도 보기 좋게 최대 4열로 맞춤 분할
+        cols = st.columns(len(tickers_in_group) if len(tickers_in_group) < 4 else 4)
+        for i, ticker in enumerate(tickers_in_group):
+            with cols[i % 4]:
+                sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0]
+                # 입력창 라벨에 '티커 (섹터명)' 형태로 출력
+                input_label = f"{ticker} ({sector_clean_name})"
+                shares_input[ticker] = st.number_input(input_label, min_value=0, step=1, key=f"s_{ticker}")
+                
+                price_display = current_prices.get(ticker, 0.0)
+                st.caption(f"${price_display:.2f}")
+    st.write("") # 그룹 간 여백 추가
 
-add_cash = st.number_input("💵 추가 투자 현금 ($)", min_value=0.0, step=100.0)
+add_cash = st.number_input("💵 리밸런싱 투입 현금 ($)", min_value=0.0, step=100.0)
 
 # 3. 진단 및 리밸런싱 실행
 if st.button("2X 섹터 리밸런싱 실행", use_container_width=True, type="primary"):
@@ -131,9 +67,7 @@ if st.button("2X 섹터 리밸런싱 실행", use_container_width=True, type="pr
         st.warning("보유 주수나 추가 현금을 최소 1개 이상 입력해주세요.")
     else:
         st.subheader("📊 리밸런싱 처방전")
-        
-        # 최적 매매 가이드라인 제공
-        st.success("💡 **매매 팁:** 스프레드 비용과 추적 오차를 없애기 위해, 밤 11시 반에 아래 수량대로 증권사 앱에서 **'LOC (종가 지정가) 예약 주문'**을 걸어두고 주무시는 것을 권장합니다.")
+        st.success("💡 **매매 팁:** 밤 11시 반에 증권사 앱에서 아래 수량대로 **'LOC (종가 지정가) 예약 주문'**을 걸어두세요.")
         
         results = []
         for ticker, target_weight in sorted_weights: 
@@ -153,11 +87,12 @@ if st.button("2X 섹터 리밸런싱 실행", use_container_width=True, type="pr
             elif rounded_diff <= -1:
                 action = f"🔴 {abs(rounded_diff)}주 전량 매도" if clean_target_weight == 0.0 else f"🔴 {abs(rounded_diff)}주 매도"
             else:
-                action = "⚪ 유지 (또는 금액 부족)"
+                action = "⚪ 유지"
 
             if curr_weight > 0 or clean_target_weight > 0 or "매수" in action or "매도" in action:
+                sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0]
                 results.append({
-                    "섹터 (티커)": f"{SECTOR_NAMES[ticker]} ({ticker})",
+                    "섹터": f"{sector_clean_name} ({ticker})", # 표에서도 읽기 쉽게 변경
                     "현재 비중": f"{curr_weight*100:.1f}%",
                     "목표 비중": f"{clean_target_weight*100:.1f}%",
                     "액션 플랜": action
