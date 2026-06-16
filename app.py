@@ -7,20 +7,20 @@ from scipy.optimize import minimize
 st.set_page_config(page_title="섹터 로테이션 계산기", layout="centered")
 st.markdown("<style>.stNumberInput, .stTextInput { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
 
-# 1. 대상 자산: 미국 GICS 11대 핵심 섹터 ETF 총망라
-TARGET_TICKERS = ["XLK", "XLF", "XLV", "XLE", "XLI", "XLY", "XLB", "XLP", "XLU", "XLRE", "XLC"]
+# 1. 대상 자산: 미국 11대 섹터 2배(2X) 레버리지 ETF
+TARGET_TICKERS = ["ROM", "UYG", "RXL", "DIG", "UXI", "UCC", "UYM", "UGE", "UPW", "URE", "LTL"]
 SECTOR_NAMES = {
-    "XLK": "기술 (Tech)",
-    "XLF": "금융 (Financials)",
-    "XLV": "헬스케어 (Health)",
-    "XLE": "에너지 (Energy)",
-    "XLI": "산업재 (Industrials)",
-    "XLY": "임의소비재 (Discretionary)",
-    "XLB": "소재 (Materials)",
-    "XLP": "필수소비재 (Staples)",
-    "XLU": "유틸리티 (Utilities)",
-    "XLRE": "부동산 (Real Estate)",
-    "XLC": "커뮤니케이션 (Communication)"
+    "ROM": "기술 2X (Tech)",
+    "UYG": "금융 2X (Financials)",
+    "RXL": "헬스케어 2X (Health)",
+    "DIG": "에너지 2X (Energy)",
+    "UXI": "산업재 2X (Industrials)",
+    "UCC": "임의소비재 2X (Discretionary)",
+    "UYM": "소재 2X (Materials)",
+    "UGE": "필수소비재 2X (Staples)",
+    "UPW": "유틸리티 2X (Utilities)",
+    "URE": "부동산 2X (Real Estate)",
+    "LTL": "커뮤니케이션 2X (Communication)"
 }
 RISK_FREE_RATE = 0.03 # 무위험수익률 3%
 
