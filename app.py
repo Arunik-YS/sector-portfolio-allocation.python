@@ -83,16 +83,24 @@ with st.spinner("최근 3개월 2배수 섹터의 자금 쏠림을 스캔하고 
     current_prices = get_current_prices(tickers_tuple)
 
 # ==========================================
-# UI 렌더링 (경제학적 특성 그룹화 및 이름 표기 적용)
+# UI 렌더링 (카테고리 역매핑 및 매드포함 버전)
 # ==========================================
 
-# 경제 특성별 티커 그룹핑 딕셔너리
+# 1. 경제 특성별 티커 그룹핑 정의
 SECTOR_GROUPS = {
     "🚀 성장 & 기술 (Growth)": ["ROM", "LTL"],
     "🏭 경기 민감 & 순환 (Cyclical)": ["UYG", "UXI", "UCC", "URE"],
     "🛡️ 경기 방어 (Defensive)": ["RXL", "UGE", "UPW"],
     "🛢️ 물가 방어 & 원자재 (Inflation)": ["DIG", "UYM"]
 }
+
+# [핵심 추가] 티커를 넣으면 카테고리명(이모지 제외)을 반환하는 역매핑 딕셔너리 자동 생성
+TICKER_TO_CATEGORY = {}
+for group_name, tickers in SECTOR_GROUPS.items():
+    # '🚀 성장 & 기술 (Growth)' -> '성장 & 기술'만 깔끔하게 추출
+    clean_category = group_name.split(" (")[0].replace("🚀 ", "").replace("🏭 ", "").replace("🛡️ ", "").replace("🛢️ ", "")
+    for t in tickers:
+        TICKER_TO_CATEGORY[t] = clean_category
 
 st.title("🚀 2X 레버리지 섹터 로테이션")
 st.caption("최근 3개월 모멘텀 기반 2배수 전술적 자산 배분 (위성 계좌용)")
@@ -112,32 +120,36 @@ else:
     cols = st.columns(min(len(active_sectors), 4))
     for i, (ticker, weight) in enumerate(active_sectors):
         with cols[i % len(cols)]:
-            # [반영 1] 티커 옆에 섹터 이름 명시적으로 표시
-            sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0] # '기술 2X (Tech)'에서 '기술'만 추출
-            st.metric(f"{ticker} ({sector_clean_name})", f"{weight*100:.1f}%")
+            sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0] # '기술'
+            category_name = TICKER_TO_CATEGORY.get(ticker, "") # '성장 & 기술'
+            
+            # [변경 포인트] st.metric의 하단 하이라이트(delta) 영역에 카테고리를 매칭하여 시각화 효과 극대화
+            st.metric(
+                label=f"{ticker} ({sector_clean_name})", 
+                value=f"{weight*100:.1f}%",
+                delta=f"[{category_name}]",
+                delta_color="off" # 카테고리 텍스트에 초록색/빨간색 화살표가 붙지 않도록 일반 텍스트화
+            )
 
 st.divider()
 
-# 2. 내 계좌 입력 (경제 그룹별로 컨테이너 분리)
+# 2. 내 계좌 입력 (경제 그룹별 배치)
 st.subheader("💼 위성 계좌 상태 입력")
 shares_input = {}
 
-# [반영 2] 그룹별로 시각적으로 묶어서 보여주기
 for group_name, tickers_in_group in SECTOR_GROUPS.items():
     st.markdown(f"**{group_name}**")
     with st.container(border=True):
-        # 모바일에서도 보기 좋게 최대 4열로 맞춤 분할
         cols = st.columns(len(tickers_in_group) if len(tickers_in_group) < 4 else 4)
         for i, ticker in enumerate(tickers_in_group):
             with cols[i % 4]:
                 sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0]
-                # 입력창 라벨에 '티커 (섹터명)' 형태로 출력
                 input_label = f"{ticker} ({sector_clean_name})"
                 shares_input[ticker] = st.number_input(input_label, min_value=0, step=1, key=f"s_{ticker}")
                 
                 price_display = current_prices.get(ticker, 0.0)
                 st.caption(f"${price_display:.2f}")
-    st.write("") # 그룹 간 여백 추가
+    st.write("") 
 
 add_cash = st.number_input("💵 리밸런싱 투입 현금 ($)", min_value=0.0, step=100.0)
 
@@ -175,8 +187,11 @@ if st.button("2X 섹터 리밸런싱 실행", use_container_width=True, type="pr
 
             if curr_weight > 0 or clean_target_weight > 0 or "매수" in action or "매도" in action:
                 sector_clean_name = SECTOR_NAMES[ticker].split(" ")[0]
+                category_name = TICKER_TO_CATEGORY.get(ticker, "")
+                
                 results.append({
-                    "섹터": f"{sector_clean_name} ({ticker})", # 표에서도 읽기 쉽게 변경
+                    "섹터": f"{sector_clean_name} ({ticker})", 
+                    "카테고리": category_name, # 결과 표에도 매칭 레이어 추가
                     "현재 비중": f"{curr_weight*100:.1f}%",
                     "목표 비중": f"{clean_target_weight*100:.1f}%",
                     "액션 플랜": action
