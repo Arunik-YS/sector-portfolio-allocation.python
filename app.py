@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-st.set_page_config(page_title="2X 섹터 로테이션", layout="centered")
+st.set_page_config(
+    page_title="270-31 포트폴리오",
+    page_icon="app_icon.png",      # 폴더에 넣어둔 이미지 파일 이름
+    layout="centered"
+)
 st.markdown("<style>.stNumberInput, .stTextInput { margin-bottom: -15px; }</style>", unsafe_allow_html=True)
 
 # 1. 대상 자산: 미국 GICS 11대 핵심 섹터 2배(2X) 레버리지 ETF
